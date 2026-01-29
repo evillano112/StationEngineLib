@@ -1,7 +1,5 @@
 import sys
 from pathlib import Path
-
-# Ensure project root is in path (important on Windows)
 sys.path.append(str(Path(__file__).parent))
 
 from importer import import_song_mysql
