@@ -1,4 +1,3 @@
-# library/models.py
 
 class SongView:
     def __init__(self, songid, title, artist, album, duration, tags):
@@ -7,7 +6,7 @@ class SongView:
         self.artist = artist
         self.album = album
         self.duration = duration  # seconds
-        self.tags = tags          # list of strings
+        self.tags = tags
 
     def to_dict(self):
         return {

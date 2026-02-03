@@ -1,9 +1,8 @@
-# Required install:
-# python -m pip install mysql-connector-python mutagen
+
 #
 # Usage:
 # python import_song_mysql.py "file/path/here"
-# OR use the incoming folder integration in the CLI for batch import
+# or use the incoming folder
 
 import hashlib
 from pathlib import Path
@@ -83,10 +82,12 @@ def getOrCreateSong(cursor, title, artist, album, genre, year, tracknumber):
 # Insert single song
 # --------------------
 def insertSong(filepath):
-    filepath = Path(filepath)
+
     if not filepath.exists():
         print(f"[ERROR] File not found: {filepath}")
         return
+
+    filepath = Path(filepath)
 
     audio = MutagenFile(filepath, easy=True)
     if audio is None:
@@ -177,7 +178,7 @@ def importIncomingFiles():
 
     files = [f for f in INCOMING_FOLDER.iterdir() if f.is_file()]
     if not files:
-        print("No files to import in incoming folder.")
+        print("No files to import in incoming folder")
         return
 
     for f in files:
@@ -189,7 +190,7 @@ def importIncomingFiles():
         except Exception as e:
             print(f"Could not delete {f.name} after import: {e}")
 
-    print("Finished importing incoming files.")
+    print("Finished importing incoming files")
 
 # --------------------
 # CLI usage
@@ -198,6 +199,3 @@ if __name__ == "__main__":
     import sys
     if len(sys.argv) == 2:
         insertSong(sys.argv[1])
-    else:
-        print("Usage: python import_song_mysql.py <audiofile>")
-        print("Or use import_incoming_files() from CLI for batch import.")

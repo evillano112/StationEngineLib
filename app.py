@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+
 sys.path.append(str(Path(__file__).parent))
 
 from importer import import_song_mysql
@@ -8,14 +9,13 @@ from db.connection import getConnection
 
 
 def normalize_path(p):
-    """
-    Fix Windows paths pasted with quotes or backslashes.
-    """
+    # fix windows paths
+    
     p = p.strip().strip('"').strip("'")
     return Path(p)
 
 
-def print_menu():
+def printMenu():
     print("\n--- Station Engine CLI ---")
     print("1. Import single song")
     print("2. Import all incoming songs")
@@ -26,7 +26,7 @@ def print_menu():
     print("7. Exit")
 
 
-def search_library():
+def searchLibrary():
     conn = getConnection()
     cursor = conn.cursor(dictionary=True)
 
@@ -83,7 +83,7 @@ def search_library():
         params.extend([start_year, end_year])
 
     else:
-        print("Invalid choice.")
+        print("Invalid choice")
         cursor.close()
         conn.close()
         return []
@@ -101,7 +101,7 @@ def search_library():
     conn.close()
 
     if not rows:
-        print("No results found.")
+        print("No results found")
         return []
 
     print("\nResults:")
@@ -123,21 +123,22 @@ def search_library():
 
 def main():
     while True:
-        print_menu()
+        printMenu()
         choice = input("Choose an option: ").strip()
 
         # -----------------------
         # Import single song
         # -----------------------
         if choice == "1":
-            raw_path = input("Enter path to audio file: ")
-            filepath = normalize_path(raw_path)
 
-            if not filepath.exists():
-                print("File does not exist.")
-                continue
+            rawPath = input("Enter path to audio file: ")
 
-            import_song_mysql.insertSong(filepath)
+            if rawPath != "":
+                filepath = normalize_path(rawPath)
+                if not filepath.exists():
+                    print("File does not exist")
+                    continue
+                import_song_mysql.insertSong(filepath)
 
         # -----------------------
         # Batch import incoming
@@ -149,7 +150,7 @@ def main():
         # Search library
         # -----------------------
         elif choice == "3":
-            search_library()
+            searchLibrary()
 
         # -----------------------
         # Create playlist
@@ -157,8 +158,10 @@ def main():
         elif choice == "4":
             show = input("Show name: ").strip()
             name = input("Playlist name: ").strip()
-            print("Durations: 30min, 1h, 1h30, 2h")
-            dur = input("Max duration: ").strip()
+            dur = ""
+            while dur != "30min" or dur != "1h" or dur != "1h30" or dur != "2h" :
+                print("Durations: 30min, 1h, 1h30, 2h")
+                dur = input("Max duration: ").strip()
 
             try:
                 pid = playlist_service.makePlaylist(show, name, dur)
@@ -170,18 +173,18 @@ def main():
         # Add song to playlist
         # -----------------------
         elif choice == "5":
-            playlist_id = input("Playlist ID: ").strip()
+            playlistid = input("Playlist ID: ").strip()
             song_id = input("Song ID: ").strip()
 
             try:
                 ok = playlist_service.addSongToPlaylist(
-                    int(playlist_id),
+                    int(playlistid),
                     int(song_id)
                 )
                 if ok:
-                    print("Song added to playlist.")
+                    print("Song added to playlist")
                 else:
-                    print("Cannot add song: playlist duration exceeded.")
+                    print("Cannot add song: playlist duration exceeded")
             except Exception as e:
                 print(f"Error: {e}")
 
@@ -189,11 +192,11 @@ def main():
         # View playlist
         # -----------------------
         elif choice == "6":
-            playlist_id = input("Playlist ID: ").strip()
+            playlistid = input("Playlist ID: ").strip()
 
-            songs = playlist_service.getPlaylistSongs(int(playlist_id))
+            songs = playlist_service.getPlaylistSongs(int(playlistid))
             if not songs:
-                print("Playlist is empty or does not exist.")
+                print("Playlist is empty or does not exist")
                 continue
 
             print("\nPlaylist contents:")
@@ -208,11 +211,11 @@ def main():
         # Exit
         # -----------------------
         elif choice == "7":
-            print("Goodbye.")
+            print("Exiting...")
             sys.exit(0)
 
         else:
-            print("Invalid choice.")
+            print("Invalid choice!")
 
 
 if __name__ == "__main__":

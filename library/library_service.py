@@ -57,7 +57,7 @@ def searchLibrary():
         params.extend([start_year, end_year])
 
     else:
-        print("Invalid choice.")
+        print("Invalid choice")
         cursor.close()
         conn.close()
         return []
@@ -75,7 +75,7 @@ def searchLibrary():
     conn.close()
 
     if not rows:
-        print("No results found.")
+        print("No results found")
         return []
 
     print("\nResults:")
