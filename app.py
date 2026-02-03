@@ -4,7 +4,7 @@ sys.path.append(str(Path(__file__).parent))
 
 from importer import import_song_mysql
 from playlist import playlist_service
-from db.connection import get_connection
+from db.connection import getConnection
 
 
 def normalize_path(p):
@@ -27,7 +27,7 @@ def print_menu():
 
 
 def search_library():
-    conn = get_connection()
+    conn = getConnection()
     cursor = conn.cursor(dictionary=True)
 
     print("\nSearch by:")
@@ -137,13 +137,13 @@ def main():
                 print("File does not exist.")
                 continue
 
-            import_song_mysql.insert_song(filepath)
+            import_song_mysql.insertSong(filepath)
 
         # -----------------------
         # Batch import incoming
         # -----------------------
         elif choice == "2":
-            import_song_mysql.import_incoming_files()
+            import_song_mysql.importIncomingFiles()
 
         # -----------------------
         # Search library
@@ -161,7 +161,7 @@ def main():
             dur = input("Max duration: ").strip()
 
             try:
-                pid = playlist_service.create_playlist(show, name, dur)
+                pid = playlist_service.makePlaylist(show, name, dur)
                 print(f"Playlist created (ID: {pid})")
             except Exception as e:
                 print(f"Error: {e}")
@@ -174,7 +174,7 @@ def main():
             song_id = input("Song ID: ").strip()
 
             try:
-                ok = playlist_service.add_song_to_playlist(
+                ok = playlist_service.addSongToPlaylist(
                     int(playlist_id),
                     int(song_id)
                 )
@@ -191,7 +191,7 @@ def main():
         elif choice == "6":
             playlist_id = input("Playlist ID: ").strip()
 
-            songs = playlist_service.get_playlist_songs(int(playlist_id))
+            songs = playlist_service.getPlaylistSongs(int(playlist_id))
             if not songs:
                 print("Playlist is empty or does not exist.")
                 continue

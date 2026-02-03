@@ -1,4 +1,4 @@
-from db.connection import get_connection
+from db.connection import getConnection
 
 MAX_DURATIONS = {
     "30min": 30 * 60,
@@ -7,12 +7,12 @@ MAX_DURATIONS = {
     "2h": 120 * 60,
 }
 
-def create_playlist(show_name, playlist_name, max_duration_key):
+def makePlaylist(show_name, playlist_name, max_duration_key):
     if max_duration_key not in MAX_DURATIONS:
         raise ValueError(f"Invalid max_duration_key: {max_duration_key}")
 
     max_duration = MAX_DURATIONS[max_duration_key]
-    conn = get_connection()
+    conn = getConnection()
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -26,8 +26,8 @@ def create_playlist(show_name, playlist_name, max_duration_key):
     conn.close()
     return playlist_id
 
-def add_song_to_playlist(playlist_id, song_id):
-    conn = get_connection()
+def addSongToPlaylist(playlist_id, song_id):
+    conn = getConnection()
     cursor = conn.cursor()
 
     cursor.execute("SELECT max_duration FROM Playlist WHERE playlistid = %s", (playlist_id,))
@@ -72,8 +72,8 @@ def add_song_to_playlist(playlist_id, song_id):
     conn.close()
     return True
 
-def get_playlist_songs(playlist_id):
-    conn = get_connection()
+def getPlaylistSongs(playlist_id):
+    conn = getConnection()
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""

@@ -3,46 +3,86 @@
 #
 # Usage:
 # python import_song_mysql.py "file/path/here"
+# OR use the incoming folder integration in the CLI for batch import
 
-import mysql.connector
 import hashlib
 from pathlib import Path
+import shutil
 from mutagen import File as MutagenFile
+from db.connection import getConnection
 
-# MySQL config
-DB_CONFIG = {
-    "host": "localhost",
-    "user": "radio_user",
-    "password": "password",
-    "database": "radio_db",
-}
+# Root folders
+MEDIA_ROOT = Path("media/songs")         # permanent storage
+INCOMING_FOLDER = Path("media/incoming") # optional batch import
 
-
-def compute_file_hash(filepath, block_size=65536):
+# --------------------
+# Hash & store files
+# --------------------
+def computeHash(filepath, block_size=65536):
     sha256 = hashlib.sha256()
     with open(filepath, "rb") as f:
         for block in iter(lambda: f.read(block_size), b""):
             sha256.update(block)
     return sha256.hexdigest()
 
+def storeFile(filepath):
+    """Move the file into organized storage under media/songs"""
+    filehash = computeHash(filepath)
+    ext = filepath.suffix.lower()
+    folder = MEDIA_ROOT / filehash[:2]
+    folder.mkdir(parents=True, exist_ok=True)
+    dest = folder / f"{filehash}{ext}"
 
-def get_or_create_tag(cursor, tagname):
-    cursor.execute(
-        "SELECT tagid FROM Tags WHERE tagname = %s",
-        (tagname,)
-    )
+    if not dest.exists():
+        shutil.copy2(filepath, dest)
+
+    return dest.resolve(), filehash
+
+# --------------------
+# Tag management
+# --------------------
+def getOrCreateTag(cursor, tagname):
+    tagname = tagname.strip()
+    if not tagname:
+        return None
+
+    # Check if tag exists
+    cursor.execute("SELECT tagid FROM Tags WHERE tagname = %s", (tagname,))
     row = cursor.fetchone()
     if row:
         return row[0]
 
-    cursor.execute(
-        "INSERT INTO Tags (tagname) VALUES (%s)",
-        (tagname,)
-    )
+    # Create tag if missing
+    cursor.execute("INSERT IGNORE INTO Tags (tagname) VALUES (%s)", (tagname,))
+    cursor.execute("SELECT tagid FROM Tags WHERE tagname = %s", (tagname,))
+    row = cursor.fetchone()
+    if row:
+        return row[0]
+
+    raise RuntimeError(f"Failed to create tag: {tagname}")
+
+# --------------------
+# Song management
+# --------------------
+def getOrCreateSong(cursor, title, artist, album, genre, year, tracknumber):
+    cursor.execute("""
+        SELECT songid FROM Song
+        WHERE title = %s AND artist = %s AND album <=> %s
+    """, (title, artist, album))
+    row = cursor.fetchone()
+    if row:
+        return row[0]
+
+    cursor.execute("""
+        INSERT INTO Song (title, artist, album, genre, year, tracknumber)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, (title, artist, album, genre, year, tracknumber))
     return cursor.lastrowid
 
-
-def insert_song(filepath):
+# --------------------
+# Insert single song
+# --------------------
+def insertSong(filepath):
     filepath = Path(filepath)
     if not filepath.exists():
         print(f"[ERROR] File not found: {filepath}")
@@ -59,7 +99,8 @@ def insert_song(filepath):
     title = get_tag("title") or filepath.stem
     artist = get_tag("artist") or "Unknown Artist"
     album = get_tag("album")
-    genre_raw = audio.get("genre", [])
+    genre_raw = get_tag("genre") or ""
+    genres = [g.strip() for g in genre_raw.split(",") if g.strip()]
     year = get_tag("date")
     tracknumber = get_tag("tracknumber")
 
@@ -69,89 +110,54 @@ def insert_song(filepath):
 
     # Normalize year
     try:
-        if year:
-            year = int(year[:4])
+        year = int(year[:4]) if year else None
     except ValueError:
         year = None
 
     # Normalize track number
     try:
-        if tracknumber:
-            tracknumber = int(tracknumber.split("/")[0])
+        tracknumber = int(tracknumber.split("/")[0]) if tracknumber else None
     except ValueError:
         tracknumber = None
 
-    filehash = compute_file_hash(filepath)
+    # Store file in permanent media storage
+    new_path, filehash = storeFile(filepath)
+    genre_string = ", ".join(genres) if genres else None
 
     try:
-        conn = mysql.connector.connect(**DB_CONFIG)
+        conn = getConnection()
         cursor = conn.cursor()
 
-        # Check for duplicate file
-        cursor.execute(
-            "SELECT fileid FROM SongFile WHERE filehash = %s",
-            (filehash,)
-        )
+        # Avoid duplicate file
+        cursor.execute("SELECT fileid FROM SongFile WHERE filehash = %s", (filehash,))
         if cursor.fetchone():
             print(f"[INFO] Duplicate file skipped: {filepath}")
             return
 
-        # Insert Song (metadata only)
-        cursor.execute(
-            """
-            INSERT INTO Song (
-                title, artist, album, genre, year, tracknumber
-            ) VALUES (%s, %s, %s, %s, %s, %s)
-            """,
-            (
-                title,
-                artist,
-                album,
-                ", ".join(genre_raw) if genre_raw else None,
-                year,
-                tracknumber
-            )
-        )
-        songid = cursor.lastrowid
+        # Insert or get song record
+        songid = getOrCreateSong(cursor, title, artist, album, genre_string, year, tracknumber)
 
-        # Insert SongFile (technical/audio data)
-        cursor.execute(
-            """
+        # Insert SongFile
+        cursor.execute("""
             INSERT INTO SongFile (
                 songid, duration, channels, codec, filepath, filehash
             ) VALUES (%s, %s, %s, %s, %s, %s)
-            """,
-            (
-                songid,
-                duration,
-                channels,
-                codec,
-                str(filepath),
-                filehash
-            )
-        )
+        """, (songid, duration, channels, codec, str(new_path), filehash))
 
-        # Insert tags (categories)
-        for genre in genre_raw:
-            genre = genre.strip()
-            if not genre:
-                continue
-
-            tagid = get_or_create_tag(cursor, genre)
-
-            cursor.execute(
-                """
-                INSERT IGNORE INTO TagEntry (songid, tagid)
-                VALUES (%s, %s)
-                """,
-                (songid, tagid)
-            )
+        # Insert tags
+        for tagname in genres:
+            tagid = getOrCreateTag(cursor, tagname)
+            if tagid:
+                cursor.execute("""
+                    INSERT IGNORE INTO TagEntry (songid, tagid)
+                    VALUES (%s, %s)
+                """, (songid, tagid))
 
         conn.commit()
         print(f"[OK] Imported: {artist} - {title}")
 
-    except mysql.connector.Error as e:
-        print(f"[ERROR] MySQL operation failed: {e}")
+    except Exception as e:
+        print(f"[ERROR] {e}")
         conn.rollback()
 
     finally:
@@ -161,12 +167,37 @@ def insert_song(filepath):
         except Exception:
             pass
 
+# --------------------
+# Batch import from incoming folder
+# --------------------
+def importIncomingFiles():
+    if not INCOMING_FOLDER.exists():
+        print("Incoming folder does not exist. Creating it.")
+        INCOMING_FOLDER.mkdir(parents=True, exist_ok=True)
 
+    files = [f for f in INCOMING_FOLDER.iterdir() if f.is_file()]
+    if not files:
+        print("No files to import in incoming folder.")
+        return
+
+    for f in files:
+        print(f"Importing {f.name}...")
+        insertSong(f)
+        # Remove file after import
+        try:
+            f.unlink()
+        except Exception as e:
+            print(f"Could not delete {f.name} after import: {e}")
+
+    print("Finished importing incoming files.")
+
+# --------------------
+# CLI usage
+# --------------------
 if __name__ == "__main__":
     import sys
-
-    if len(sys.argv) != 2:
+    if len(sys.argv) == 2:
+        insertSong(sys.argv[1])
+    else:
         print("Usage: python import_song_mysql.py <audiofile>")
-        sys.exit(1)
-
-    insert_song(sys.argv[1])
+        print("Or use import_incoming_files() from CLI for batch import.")

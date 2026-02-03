@@ -1,5 +1,7 @@
-def search_library():
-    conn = get_connection()
+from db.connection import getConnection
+
+def searchLibrary():
+    conn = getConnection()
     cursor = conn.cursor(dictionary=True)
 
     print("\nSearch by:")
