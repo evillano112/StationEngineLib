@@ -158,10 +158,9 @@ def main():
         elif choice == "4":
             show = input("Show name: ").strip()
             name = input("Playlist name: ").strip()
-            dur = ""
-            while dur != "30min" or dur != "1h" or dur != "1h30" or dur != "2h" :
-                print("Durations: 30min, 1h, 1h30, 2h")
-                dur = input("Max duration: ").strip()
+
+            print("Durations: 30min, 1h, 1h30, 2h")
+            dur = input("Max duration: ").strip()
 
             try:
                 pid = playlist_service.makePlaylist(show, name, dur)

@@ -7,18 +7,18 @@ MAX_DURATIONS = {
     "2h": 120 * 60,
 }
 
-def makePlaylist(show_name, playlist_name, max_duration_key):
-    if max_duration_key not in MAX_DURATIONS:
-        raise ValueError(f"Invalid max_duration_key: {max_duration_key}")
+def makePlaylist(show_name, playlist_name, maxDurationKey):
+    if maxDurationKey not in MAX_DURATIONS:
+        raise ValueError(f"Invalid max_duration_key: {maxDurationKey}")
 
-    max_duration = MAX_DURATIONS[max_duration_key]
+    maxDuration = MAX_DURATIONS[maxDurationKey]
     conn = getConnection()
     cursor = conn.cursor()
 
     cursor.execute("""
         INSERT INTO Playlist (show_name, playlist_name, max_duration)
         VALUES (%s, %s, %s)
-    """, (show_name, playlist_name, max_duration))
+    """, (show_name, playlist_name, maxDuration))
 
     playlist_id = cursor.lastrowid
     conn.commit()
@@ -72,7 +72,7 @@ def addSongToPlaylist(playlist_id, song_id):
     conn.close()
     return True
 
-def getPlaylistSongs(playlist_id):
+def getPlaylistSongs(playlistid):
     conn = getConnection()
     cursor = conn.cursor(dictionary=True)
 
@@ -83,7 +83,7 @@ def getPlaylistSongs(playlist_id):
         JOIN SongFile sf ON s.songid = sf.songid
         WHERE pe.playlistid = %s
         ORDER BY pe.position
-    """, (playlist_id,))
+    """, (playlistid,))
 
     songs = cursor.fetchall()
     cursor.close()
