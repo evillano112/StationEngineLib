@@ -173,12 +173,12 @@ def main():
         # -----------------------
         elif choice == "5":
             playlistid = input("Playlist ID: ").strip()
-            song_id = input("Song ID: ").strip()
+            songid = input("Song ID: ").strip()
 
             try:
                 ok = playlist_service.addSongToPlaylist(
                     int(playlistid),
-                    int(song_id)
+                    int(songid)
                 )
                 if ok:
                     print("Song added to playlist")

@@ -13,7 +13,7 @@ def searchLibrary():
 
     choice = input("Choose option: ").strip()
 
-    base_sql = """
+    sqlbase = """
         SELECT DISTINCT
             s.songid,
             s.title,
@@ -27,34 +27,34 @@ def searchLibrary():
         LEFT JOIN Tags t ON te.tagid = t.tagid
     """
 
-    where_clause = ""
+    whereClause = ""
     params = []
 
     if choice == "1":  # Title
         value = input("Enter title: ").strip()
-        where_clause = "WHERE s.title LIKE %s"
+        whereClause = "WHERE s.title LIKE %s"
         params.append(f"%{value}%")
 
     elif choice == "2":  # Artist
         value = input("Enter artist: ").strip()
-        where_clause = "WHERE s.artist LIKE %s"
+        whereClause = "WHERE s.artist LIKE %s"
         params.append(f"%{value}%")
 
     elif choice == "3":  # Album
         value = input("Enter album: ").strip()
-        where_clause = "WHERE s.album LIKE %s"
+        whereClause = "WHERE s.album LIKE %s"
         params.append(f"%{value}%")
 
     elif choice == "4":  # Tag
         value = input("Enter tag: ").strip()
-        where_clause = "WHERE t.tagname LIKE %s"
+        whereClause = "WHERE t.tagname LIKE %s"
         params.append(f"%{value}%")
 
     elif choice == "5":  # Year range
-        start_year = input("Start year: ").strip()
-        end_year = input("End year: ").strip()
-        where_clause = "WHERE s.year BETWEEN %s AND %s"
-        params.extend([start_year, end_year])
+        startYear = input("Start year: ").strip()
+        endYear = input("End year: ").strip()
+        whereClause = "WHERE s.year BETWEEN %s AND %s"
+        params.extend([startYear, endYear])
 
     else:
         print("Invalid choice")
@@ -63,8 +63,8 @@ def searchLibrary():
         return []
 
     sql = f"""
-        {base_sql}
-        {where_clause}
+        {sqlbase}
+        {whereClause}
         ORDER BY s.artist, s.album, s.title
     """
 
