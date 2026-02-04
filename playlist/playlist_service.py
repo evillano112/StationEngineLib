@@ -9,7 +9,7 @@ MAX_DURATIONS = {
 
 def makePlaylist(showName, playlistName, maxDurationKey):
     if maxDurationKey not in MAX_DURATIONS:
-        raise ValueError(f"Invalid max_duration_key: {maxDurationKey}")
+        raise ValueError(f"Invalid maxDurationKey: {maxDurationKey}")
 
     maxDuration = MAX_DURATIONS[maxDurationKey]
     conn = getConnection()
