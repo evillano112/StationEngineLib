@@ -30,7 +30,7 @@ def addSongToPlaylist(playlistid, songid):
     conn = getConnection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT maxduration FROM Playlist WHERE playlistid = %s", (playlist_id,))
+    cursor.execute("SELECT maxduration FROM Playlist WHERE playlistid = %s", (playlistid,))
     row = cursor.fetchone()
     if not row:
         cursor.close()
@@ -89,3 +89,5 @@ def getPlaylistSongs(playlistid):
     cursor.close()
     conn.close()
     return songs
+
+# def deletePlaylist():

@@ -23,13 +23,12 @@ def printMenu():
     print("4. Create playlist")
     print("5. Add song to playlist")
     print("6. View playlist songs")
-    print("7. Exit")
+    print("7. Delete Something")
+    print("8. Exit")
 
 
-def searchLibrary():
-    conn = getConnection()
-    cursor = conn.cursor(dictionary=True)
 
+def cli_search():
     print("\nSearch by:")
     print("1. Title")
     print("2. Artist")
@@ -39,84 +38,39 @@ def searchLibrary():
 
     choice = input("Choose option: ").strip()
 
-    base_sql = """
-        SELECT DISTINCT
-            s.songid,
-            s.title,
-            s.artist,
-            s.album,
-            s.year,
-            sf.duration
-        FROM Song s
-        JOIN SongFile sf ON s.songid = sf.songid
-        LEFT JOIN TagEntry te ON s.songid = te.songid
-        LEFT JOIN Tags t ON te.tagid = t.tagid
-    """
+    if choice == "1":
+        value = input("Enter title: ")
+        rows = search_library("title", value=value)
 
-    where_clause = ""
-    params = []
+    elif choice == "2":
+        value = input("Enter artist: ")
+        rows = search_library("artist", value=value)
 
-    if choice == "1":  # Title
-        value = input("Enter title: ").strip()
-        where_clause = "WHERE s.title LIKE %s"
-        params.append(f"%{value}%")
+    elif choice == "3":
+        value = input("Enter album: ")
+        rows = search_library("album", value=value)
 
-    elif choice == "2":  # Artist
-        value = input("Enter artist: ").strip()
-        where_clause = "WHERE s.artist LIKE %s"
-        params.append(f"%{value}%")
+    elif choice == "4":
+        value = input("Enter tag: ")
+        rows = search_library("tag", value=value)
 
-    elif choice == "3":  # Album
-        value = input("Enter album: ").strip()
-        where_clause = "WHERE s.album LIKE %s"
-        params.append(f"%{value}%")
-
-    elif choice == "4":  # Tag
-        value = input("Enter tag: ").strip()
-        where_clause = "WHERE t.tagname LIKE %s"
-        params.append(f"%{value}%")
-
-    elif choice == "5":  # Year range
-        start_year = input("Start year: ").strip()
-        end_year = input("End year: ").strip()
-        where_clause = "WHERE s.year BETWEEN %s AND %s"
-        params.extend([start_year, end_year])
+    elif choice == "5":
+        start = input("Start year: ")
+        end = input("End year: ")
+        rows = search_library("year", start_year=start, end_year=end)
 
     else:
         print("Invalid choice")
-        cursor.close()
-        conn.close()
-        return []
-
-    sql = f"""
-        {base_sql}
-        {where_clause}
-        ORDER BY s.artist, s.album, s.title
-    """
-
-    cursor.execute(sql, params)
-    rows = cursor.fetchall()
-
-    cursor.close()
-    conn.close()
+        return
 
     if not rows:
         print("No results found")
-        return []
+        return
 
-    print("\nResults:")
     for r in rows:
         dur = r["duration"] or 0
-        minutes = dur // 60
-        seconds = dur % 60
-        year = r["year"] or "----"
+        print(f'{r["songid"]:>4} | {r["artist"]} - {r["title"]} [{dur//60}:{dur%60:02}]')
 
-        print(
-            f'{r["songid"]:>4} | {r["artist"]} - {r["title"]} '
-            f'({r["album"]}, {year}) [{minutes}:{seconds:02}]'
-        )
-
-    return rows
 
 
 
@@ -150,7 +104,7 @@ def main():
         # Search library
         # -----------------------
         elif choice == "3":
-            searchLibrary()
+            cli_search()
 
         # -----------------------
         # Create playlist
@@ -207,9 +161,13 @@ def main():
                 )
 
         # -----------------------
+        # Delete Song/Playlist
+        # -----------------------
+
+        # -----------------------
         # Exit
         # -----------------------
-        elif choice == "7":
+        elif choice == "8":
             print("Exiting...")
             sys.exit(0)
 

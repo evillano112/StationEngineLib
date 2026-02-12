@@ -81,18 +81,13 @@ def getOrCreateSong(cursor, title, artist, album, genre, year, tracknumber):
 # --------------------
 # Insert single song
 # --------------------
-def insertSong(filepath):
-
+def import_song(filepath: Path):
     if not filepath.exists():
-        print(f"[ERROR] File not found: {filepath}")
-        return
-
-    filepath = Path(filepath)
+        return False, "File does not exist", None
 
     audio = MutagenFile(filepath, easy=True)
     if audio is None:
-        print(f"[ERROR] Unsupported or unreadable audio file: {filepath}")
-        return
+        return False, "Unsupported or unreadable audio file", None
 
     def get_tag(name):
         return audio.get(name, [None])[0]
@@ -109,19 +104,18 @@ def insertSong(filepath):
     channels = getattr(audio.info, "channels", None)
     codec = audio.mime[0] if audio.mime else None
 
-    # Normalize year
+    # normalize year
     try:
         year = int(year[:4]) if year else None
-    except ValueError:
+    except:
         year = None
 
-    # Normalize track number
+    # normalize track
     try:
         tracknumber = int(tracknumber.split("/")[0]) if tracknumber else None
-    except ValueError:
+    except:
         tracknumber = None
 
-    # Store file in permanent media storage
     new_path, filehash = storeFile(filepath)
     genre_string = ", ".join(genres) if genres else None
 
@@ -129,44 +123,36 @@ def insertSong(filepath):
         conn = getConnection()
         cursor = conn.cursor()
 
-        # Avoid duplicate file
         cursor.execute("SELECT fileid FROM SongFile WHERE filehash = %s", (filehash,))
         if cursor.fetchone():
-            print(f"[INFO] Duplicate file skipped: {filepath}")
-            return
+            return False, "Duplicate file", None
 
-        # Insert or get song record
         songid = getOrCreateSong(cursor, title, artist, album, genre_string, year, tracknumber)
 
-        # Insert SongFile
         cursor.execute("""
-            INSERT INTO SongFile (
-                songid, duration, channels, codec, filepath, filehash
-            ) VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO SongFile (songid, duration, channels, codec, filepath, filehash)
+            VALUES (%s, %s, %s, %s, %s, %s)
         """, (songid, duration, channels, codec, str(new_path), filehash))
 
-        # Insert tags
         for tagname in genres:
             tagid = getOrCreateTag(cursor, tagname)
             if tagid:
-                cursor.execute("""
-                    INSERT IGNORE INTO TagEntry (songid, tagid)
-                    VALUES (%s, %s)
-                """, (songid, tagid))
+                cursor.execute(
+                    "INSERT IGNORE INTO TagEntry (songid, tagid) VALUES (%s, %s)",
+                    (songid, tagid)
+                )
 
         conn.commit()
-        print(f"[OK] Imported: {artist} - {title}")
+        return True, "Imported", songid
 
     except Exception as e:
-        print(f"[ERROR] {e}")
         conn.rollback()
+        return False, str(e), None
 
     finally:
-        try:
-            cursor.close()
-            conn.close()
-        except Exception:
-            pass
+        cursor.close()
+        conn.close()
+
 
 # --------------------
 # Batch import from incoming folder
