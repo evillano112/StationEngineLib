@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 
+from library.library_service import search_library
+
 sys.path.append(str(Path(__file__).parent))
 
 from importer import import_song_mysql
