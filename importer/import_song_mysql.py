@@ -169,7 +169,7 @@ def importIncomingFiles():
 
     for f in files:
         print(f"Importing {f.name}...")
-        insertSong(f)
+        import_song(f)
         # Remove file after import
         try:
             f.unlink()
@@ -184,4 +184,4 @@ def importIncomingFiles():
 if __name__ == "__main__":
     import sys
     if len(sys.argv) == 2:
-        insertSong(sys.argv[1])
+        import_song(sys.argv[1])
