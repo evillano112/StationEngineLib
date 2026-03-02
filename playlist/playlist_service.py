@@ -8,51 +8,28 @@ MAX_DURATIONS = {
     "2h": 120 * 60,
 }
 
-def makePlaylist(show_name, playlist_name, max_duration):
+def create_playlist(name, show_id):
     conn = getConnection()
     cursor = conn.cursor()
 
-    # Convert duration string to seconds
-    duration_map = {
-        "30min": 1800,
-        "1h": 3600,
-        "1h30": 5400,
-        "2h": 7200
-    }
-
-    if max_duration not in duration_map:
-        raise ValueError("Invalid duration")
-
-    seconds = duration_map[max_duration]
-
-    # Get showid
-    cursor.execute(
-        "SELECT showid FROM Shows WHERE name = %s",
-        (show_name,)
-    )
-
-    row = cursor.fetchone()
-
-    if not row:
+    # Validate show exists
+    cursor.execute("SELECT ShowID FROM shows WHERE ShowID = %s", (show_id,))
+    if not cursor.fetchone():
         cursor.close()
         conn.close()
-        raise ValueError("Show does not exist")
+        return False
 
-    showid = row[0]
+    sql = """
+        INSERT INTO Playlist (name, showid)
+        VALUES (%s, %s)
+    """
 
-    # Insert playlist
-    cursor.execute("""
-        INSERT INTO Playlist (showid, playlist_name, max_duration)
-        VALUES (%s, %s, %s)
-    """, (showid, playlist_name, seconds))
-
+    cursor.execute(sql, (name, show_id))
     conn.commit()
-    pid = cursor.lastrowid
 
     cursor.close()
     conn.close()
-
-    return pid
+    return True
 
 def addSongToPlaylist(playlistid, songid):
     conn = getConnection()

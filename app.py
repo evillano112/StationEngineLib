@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 from datetime import datetime
+from playlist.playlist_service import create_playlist
 
 sys.path.append(str(Path(__file__).parent))
 
@@ -8,7 +9,6 @@ from library.library_service import search_library
 from importer import import_song_mysql
 from playlist import playlist_service
 
-# NEW IMPORTS
 from library.tag_service import create_tag
 from library.song_edit_service import edit_song, add_tag_to_song
 from library.delete_service import (
@@ -21,6 +21,7 @@ from playlist.show_service import create_show, search_shows
 def normalize_path(p):
     p = p.strip().strip('"').strip("'")
     return Path(p)
+
 
 
 def printMenu():
@@ -95,6 +96,26 @@ def cli_search():
             f'[{minutes}:{seconds:02}]'
         )
 
+def cli_create_playlist():
+    print("\nAvailable Shows:")
+    shows = search_shows()
+
+    for s in shows:
+        print(f"{s['ShowID']} | {s['Name']}")
+
+    name = input("\nEnter playlist name: ")
+    show_id = input("Enter Show ID for this playlist: ")
+
+    if not show_id.isdigit():
+        print("Invalid Show ID.")
+        return
+
+    success = create_playlist(name, int(show_id))
+
+    if success:
+        print("Playlist created successfully.")
+    else:
+        print("Show not found.")
 
 def main():
     while True:
@@ -129,21 +150,37 @@ def main():
 
         # Create playlist
         elif choice == "4":
-            show_name = input("Show name: ").strip()
-            playlist_name = input("Playlist name: ").strip()
+            print("\n--- Create Playlist ---")
 
-            print("Durations: 30min, 1h, 1h30, 2h")
-            duration = input("Max duration: ").strip()
+            # show available shows
 
-            try:
-                pid = playlist_service.makePlaylist(
-                    show_name,
-                    playlist_name,
-                    duration
-                )
-                print(f"Playlist created (ID: {pid})")
-            except Exception as e:
-                print(f"Error: {e}")
+            shows = search_shows()
+
+            if not shows:
+                print("No shows found. Create a show first.")
+                continue
+
+            print("\nAvailable Shows:")
+            print("-" * 40)
+            for s in shows:
+                print(f"{s['ShowID']} | {s['Name']}")
+
+            print("-" * 40)
+
+            name = input("Enter playlist name: ").strip()
+            show_id = input("Enter Show ID for this playlist: ").strip()
+
+            if not show_id.isdigit():
+                print("Invalid Show ID.")
+                continue
+
+            from playlist import create_playlist
+            success = create_playlist(name, int(show_id))
+
+            if success:
+                print("Playlist created successfully.")
+            else:
+                print("Show not found. Playlist not created.")
 
         # Add song to playlist
         elif choice == "5":
