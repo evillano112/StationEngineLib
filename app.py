@@ -101,7 +101,7 @@ def cli_create_playlist():
     shows = search_shows()
 
     for s in shows:
-        print(f"{s['ShowID']} | {s['Name']}")
+        print(f"{s['showid']} | {s['name']}")
 
     name = input("\nEnter playlist name: ")
     show_id = input("Enter Show ID for this playlist: ")
