@@ -23,7 +23,7 @@ def search_library(search_type, value=None, start_year=None, end_year=None):
 
     if search_type == "title":
         where_clause = "WHERE s.title LIKE %s"
-        params.append(f"%{value}%")
+        params.append(f"{value}%")
 
     elif search_type == "artist":
         where_clause = "WHERE s.artist LIKE %s"
@@ -31,7 +31,7 @@ def search_library(search_type, value=None, start_year=None, end_year=None):
 
     elif search_type == "album":
         where_clause = "WHERE s.album LIKE %s"
-        params.append(f"%{value}%")
+        params.append(f"${value}%")
 
     elif search_type == "tag":
         where_clause = "WHERE t.tagname LIKE %s"

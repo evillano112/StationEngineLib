@@ -1,8 +1,8 @@
-
 #
 # Usage:
 # python import_song_mysql.py "file/path/here"
 # or use the incoming folder
+#
 
 import hashlib
 from pathlib import Path
@@ -14,6 +14,7 @@ from db.connection import getConnection
 MEDIA_ROOT = Path("media/songs")         # permanent storage
 INCOMING_FOLDER = Path("media/incoming") # optional batch import
 
+
 # --------------------
 # Hash & store files
 # --------------------
@@ -24,18 +25,22 @@ def computeHash(filepath, block_size=65536):
             sha256.update(block)
     return sha256.hexdigest()
 
+
 def storeFile(filepath):
-    """Move the file into organized storage under media/songs"""
+    """Copy the file into organized storage under media/songs"""
     filehash = computeHash(filepath)
     ext = filepath.suffix.lower()
+
     folder = MEDIA_ROOT / filehash[:2]
     folder.mkdir(parents=True, exist_ok=True)
+
     dest = folder / f"{filehash}{ext}"
 
     if not dest.exists():
         shutil.copy2(filepath, dest)
 
     return dest.resolve(), filehash
+
 
 # --------------------
 # Tag management
@@ -45,20 +50,20 @@ def getOrCreateTag(cursor, tagname):
     if not tagname:
         return None
 
-    # Check if tag exists
     cursor.execute("SELECT tagid FROM Tags WHERE tagname = %s", (tagname,))
     row = cursor.fetchone()
     if row:
-        return row[0]
+        return row["tagid"]  # FIXED
 
-    # Create tag if missing
     cursor.execute("INSERT IGNORE INTO Tags (tagname) VALUES (%s)", (tagname,))
     cursor.execute("SELECT tagid FROM Tags WHERE tagname = %s", (tagname,))
     row = cursor.fetchone()
+
     if row:
-        return row[0]
+        return row["tagid"]  # FIXED
 
     raise RuntimeError(f"Failed to create tag: {tagname}")
+
 
 # --------------------
 # Song management
@@ -68,15 +73,18 @@ def getOrCreateSong(cursor, title, artist, album, genre, year, tracknumber):
         SELECT songid FROM Song
         WHERE title = %s AND artist = %s AND album <=> %s
     """, (title, artist, album))
+
     row = cursor.fetchone()
     if row:
-        return row[0]
+        return row["songid"]  # FIXED
 
     cursor.execute("""
         INSERT INTO Song (title, artist, album, genre, year, tracknumber)
         VALUES (%s, %s, %s, %s, %s, %s)
     """, (title, artist, album, genre, year, tracknumber))
+
     return cursor.lastrowid
+
 
 # --------------------
 # Insert single song
@@ -107,33 +115,42 @@ def import_song(filepath: Path):
     # normalize year
     try:
         year = int(year[:4]) if year else None
-    except:
+    except Exception:
         year = None
 
     # normalize track
     try:
         tracknumber = int(tracknumber.split("/")[0]) if tracknumber else None
-    except:
+    except Exception:
         tracknumber = None
 
+    # Store file AFTER metadata extraction
     new_path, filehash = storeFile(filepath)
     genre_string = ", ".join(genres) if genres else None
 
+    conn = None
+    cursor = None
+
     try:
         conn = getConnection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
 
+        # Check duplicate file
         cursor.execute("SELECT fileid FROM SongFile WHERE filehash = %s", (filehash,))
         if cursor.fetchone():
             return False, "Duplicate file", None
 
-        songid = getOrCreateSong(cursor, title, artist, album, genre_string, year, tracknumber)
+        songid = getOrCreateSong(
+            cursor, title, artist, album,
+            genre_string, year, tracknumber
+        )
 
         cursor.execute("""
             INSERT INTO SongFile (songid, duration, channels, codec, filepath, filehash)
             VALUES (%s, %s, %s, %s, %s, %s)
         """, (songid, duration, channels, codec, str(new_path), filehash))
 
+        # Insert tag relationships
         for tagname in genres:
             tagid = getOrCreateTag(cursor, tagname)
             if tagid:
@@ -146,16 +163,20 @@ def import_song(filepath: Path):
         return True, "Imported", songid
 
     except Exception as e:
-        conn.rollback()
+        if conn:
+            conn.rollback()
+        print("IMPORT ERROR:", repr(e))
         return False, str(e), None
 
     finally:
-        cursor.close()
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 # --------------------
-# Batch import from incoming folder
+# Batch import
 # --------------------
 def importIncomingFiles():
     if not INCOMING_FOLDER.exists():
@@ -163,25 +184,35 @@ def importIncomingFiles():
         INCOMING_FOLDER.mkdir(parents=True, exist_ok=True)
 
     files = [f for f in INCOMING_FOLDER.iterdir() if f.is_file()]
+
     if not files:
         print("No files to import in incoming folder")
         return
 
     for f in files:
         print(f"Importing {f.name}...")
-        insertSong(f)
-        # Remove file after import
-        try:
-            f.unlink()
-        except Exception as e:
-            print(f"Could not delete {f.name} after import: {e}")
+        success, msg, _ = import_song(f)
+        print(msg)
+
+        if success:
+            try:
+                f.unlink()
+            except Exception as e:
+                print(f"Could not delete {f.name}: {e}")
 
     print("Finished importing incoming files")
 
+
 # --------------------
-# CLI usage idk i was having a problem and this fixed it idk how
+# CLI usage
 # --------------------
 if __name__ == "__main__":
     import sys
+
     if len(sys.argv) == 2:
-        insertSong(sys.argv[1])
+        path = Path(sys.argv[1])
+        success, message, songid = import_song(path)
+        print(message)
+    else:
+        print("Usage: python import_song_mysql.py <filepath>")
+

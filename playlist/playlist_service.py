@@ -1,4 +1,5 @@
 from db.connection import getConnection
+from datetime import datetime
 
 MAX_DURATIONS = {
     "30min": 30 * 60,
@@ -7,30 +8,57 @@ MAX_DURATIONS = {
     "2h": 120 * 60,
 }
 
-def makePlaylist(showName, playlistName, maxDurationKey):
-    if maxDurationKey not in MAX_DURATIONS:
-        raise ValueError(f"Invalid maxDurationKey: {maxDurationKey}")
-
-    maxDuration = MAX_DURATIONS[maxDurationKey]
+def makePlaylist(show_name, playlist_name, max_duration):
     conn = getConnection()
     cursor = conn.cursor()
 
-    cursor.execute("""
-        INSERT INTO Playlist (showName, playlistName, maxDuration)
-        VALUES (%s, %s, %s)
-    """, (showName, playlistName, maxDuration))
+    # Convert duration string to seconds
+    duration_map = {
+        "30min": 1800,
+        "1h": 3600,
+        "1h30": 5400,
+        "2h": 7200
+    }
 
-    playlistid = cursor.lastrowid
+    if max_duration not in duration_map:
+        raise ValueError("Invalid duration")
+
+    seconds = duration_map[max_duration]
+
+    # Get showid
+    cursor.execute(
+        "SELECT showid FROM Shows WHERE name = %s",
+        (show_name,)
+    )
+
+    row = cursor.fetchone()
+
+    if not row:
+        cursor.close()
+        conn.close()
+        raise ValueError("Show does not exist")
+
+    showid = row[0]
+
+    # Insert playlist
+    cursor.execute("""
+        INSERT INTO Playlist (showid, playlist_name, max_duration)
+        VALUES (%s, %s, %s)
+    """, (showid, playlist_name, seconds))
+
     conn.commit()
+    pid = cursor.lastrowid
+
     cursor.close()
     conn.close()
-    return playlistid
+
+    return pid
 
 def addSongToPlaylist(playlistid, songid):
     conn = getConnection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT maxduration FROM Playlist WHERE playlistid = %s", (playlistid,))
+    cursor.execute("SELECT max_duration FROM Playlist WHERE playlistid = %s", (playlistid,))
     row = cursor.fetchone()
     if not row:
         cursor.close()
@@ -90,4 +118,41 @@ def getPlaylistSongs(playlistid):
     conn.close()
     return songs
 
-# def deletePlaylist():
+def search_playlists(name=None, show=None):
+    conn = getConnection()
+    cursor = conn.cursor(dictionary=True)
+
+    sql = """
+        SELECT 
+            p.playlistid,
+            p.playlist_name,
+            p.max_duration,
+            p.created_at,
+            s.name AS show_name
+        FROM Playlist p
+        JOIN Shows s ON p.showid = s.showid
+    """
+
+    params = []
+    conditions = []
+
+    if name:
+        conditions.append("p.playlist_name LIKE %s")
+        params.append(f"%{name}%")
+
+    if show:
+        conditions.append("s.name LIKE %s")
+        params.append(f"%{show}%")
+
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+
+    sql += " ORDER BY p.created_at DESC"
+
+    cursor.execute(sql, params)
+    rows = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+    return rows
+
