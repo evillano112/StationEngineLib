@@ -1,5 +1,5 @@
-# StationEngineLib
+# Station Engine
 
-python -m pip install mysql-connector-python mutagen
+Install dependencies:
+  pip install -r requirements.txt
 
-using version 3.13
