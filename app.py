@@ -1,12 +1,11 @@
 import sys
 from pathlib import Path
 from datetime import datetime
-from playlist.playlist_service import create_playlist
-
 sys.path.append(str(Path(__file__).parent))
 
 from library.library_service import search_library
 from importer import import_song_mysql
+from playlist.playlist_service import create_playlist
 from playlist import playlist_service
 
 from library.tag_service import create_tag
@@ -163,7 +162,7 @@ def main():
             print("\nAvailable Shows:")
             print("-" * 40)
             for s in shows:
-                print(f"{s['ShowID']} | {s['Name']}")
+                print(f"{s['showid']} | {s['name']}")
 
             print("-" * 40)
 
@@ -174,7 +173,6 @@ def main():
                 print("Invalid Show ID.")
                 continue
 
-            from playlist import create_playlist
             success = create_playlist(name, int(show_id))
 
             if success:

@@ -13,14 +13,14 @@ def create_playlist(name, show_id):
     cursor = conn.cursor()
 
     # Validate show exists
-    cursor.execute("SELECT ShowID FROM shows WHERE ShowID = %s", (show_id,))
+    cursor.execute("SELECT showid FROM shows WHERE showid = %s", (show_id,))
     if not cursor.fetchone():
         cursor.close()
         conn.close()
         return False
 
     sql = """
-        INSERT INTO Playlist (name, showid)
+        INSERT INTO Playlist (playlist_name, showid)
         VALUES (%s, %s)
     """
 
