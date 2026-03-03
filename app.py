@@ -5,7 +5,7 @@ sys.path.append(str(Path(__file__).parent))
 
 from library.library_service import search_library
 from importer import import_song_mysql
-from playlist.playlist_service import create_playlist
+from playlist.playlist_service import create_playlist, search_playlists
 from playlist import playlist_service
 
 from library.tag_service import create_tag
@@ -42,6 +42,32 @@ def printMenu():
     print("15. Search shows")
     print("0. Exit")
 
+
+def print_all_songs():
+    rows = search_library("title",value="")
+    for song in rows:
+        dur = song["duration"] or 0
+        minutes = dur // 60
+        seconds = dur % 60
+
+        print(
+            f'{song["songid"]:>4} | '
+            f'{song["artist"]} - {song["title"]} '
+            f'[{minutes}:{seconds:02}]'
+        )
+
+def print_all_playlists():
+    rows = playlist_service.search_playlists("","")
+
+    if not rows:
+        print("No playlists found")
+    else:
+        print("\nPlaylists:\n")
+        for p in rows:
+            print(
+                f'{p["playlistid"]:>3} | '
+                f'{p["show_name"]} - {p["playlist_name"]}'
+            )
 
 def cli_search():
     print("\nSearch by:")
@@ -99,22 +125,45 @@ def cli_create_playlist():
     print("\nAvailable Shows:")
     shows = search_shows()
 
+    if not shows:
+        print("No shows available.")
+        return
+
     for s in shows:
         print(f"{s['showid']} | {s['name']}")
 
-    name = input("\nEnter playlist name: ")
-    show_id = input("Enter Show ID for this playlist: ")
+    name = input("\nEnter playlist name: ").strip()
+    show_id = input("Enter Show ID for this playlist: ").strip()
 
     if not show_id.isdigit():
         print("Invalid Show ID.")
         return
 
-    success = create_playlist(name, int(show_id))
+    # Ask for max duration
+    print("Select max duration: 30min, 1h, 1h30, 2h")
+    duration_input = input("Enter max duration: ").strip().lower()
+
+    # Convert to seconds
+    duration_map = {
+        "30min": 30 * 60,
+        "1h": 60 * 60,
+        "1h30": 90 * 60,
+        "2h": 120 * 60
+    }
+
+    if duration_input not in duration_map:
+        print("Invalid duration option.")
+        return
+
+    max_duration = duration_map[duration_input]
+
+    # Call service to create playlist
+    success = create_playlist(name, int(show_id), max_duration)
 
     if success:
         print("Playlist created successfully.")
     else:
-        print("Show not found.")
+        print("Show not found or playlist could not be created.")
 
 def main():
     while True:
@@ -151,34 +200,8 @@ def main():
         elif choice == "4":
             print("\n--- Create Playlist ---")
 
-            # show available shows
+            cli_create_playlist()
 
-            shows = search_shows()
-
-            if not shows:
-                print("No shows found. Create a show first.")
-                continue
-
-            print("\nAvailable Shows:")
-            print("-" * 40)
-            for s in shows:
-                print(f"{s['showid']} | {s['name']}")
-
-            print("-" * 40)
-
-            name = input("Enter playlist name: ").strip()
-            show_id = input("Enter Show ID for this playlist: ").strip()
-
-            if not show_id.isdigit():
-                print("Invalid Show ID.")
-                continue
-
-            success = create_playlist(name, int(show_id))
-
-            if success:
-                print("Playlist created successfully.")
-            else:
-                print("Show not found. Playlist not created.")
 
         # Add song to playlist
         elif choice == "5":
@@ -254,6 +277,7 @@ def main():
 
         # Add tag to song
         elif choice == "9":
+            print_all_songs()
             try:
                 songid = int(input("Song ID: ").strip())
             except ValueError:
@@ -266,6 +290,7 @@ def main():
 
         # Delete song
         elif choice == "10":
+            print_all_songs()
             try:
                 songid = int(input("Song ID to delete: ").strip())
             except ValueError:
@@ -277,6 +302,7 @@ def main():
 
         # Delete playlist
         elif choice == "11":
+            print_all_playlists()
             try:
                 playlistid = int(input("Playlist ID to delete: ").strip())
             except ValueError:
@@ -286,10 +312,14 @@ def main():
             success, message = delete_playlist(playlistid)
             print(message)
 
+
         # Delete show
         elif choice == "12":
-            show_name = input("Show name to delete: ").strip()
-            success, message = delete_show(show_name)
+            shows = search_shows()
+            for s in shows:
+                print(f"{s['showid']} | {s['name']}")
+            show_id = input("Show id to delete: ").strip()
+            success, message = delete_show(show_id)
             print(message)
 
         # Create show

@@ -53,32 +53,25 @@ def delete_playlist(playlistid: int):
         cursor.close()
         conn.close()
 
-
-def delete_show(show_name: str):
-    conn = getConnection()
-    cursor = conn.cursor(dictionary=True)
-
+def delete_show(show_id: int):
     try:
-        cursor.execute(
-            "SELECT playlistid FROM Playlist WHERE show_name = %s",
-            (show_name,)
-        )
+        conn = getConnection()
+        cursor = conn.cursor()
 
+        # Check if the show exists
+        cursor.execute("SELECT showid FROM shows WHERE showid = %s", (show_id,))
         if not cursor.fetchone():
-            return False, "Show does not exist"
+            cursor.close()
+            conn.close()
+            return False, f"Show with ID {show_id} does not exist."
 
-        cursor.execute(
-            "DELETE FROM Playlist WHERE show_name = %s",
-            (show_name,)
-        )
-
+        # Delete the show
+        cursor.execute("DELETE FROM shows WHERE showid = %s", (show_id,))
         conn.commit()
-        return True, "Show and associated playlists deleted"
 
-    except Exception as e:
-        conn.rollback()
-        return False, str(e)
-
-    finally:
         cursor.close()
         conn.close()
+        return True, f"Show with ID {show_id} deleted successfully."
+
+    except Exception as e:
+        return False, f"Error deleting show: {e}"

@@ -8,7 +8,7 @@ MAX_DURATIONS = {
     "2h": 120 * 60,
 }
 
-def create_playlist(name, show_id):
+def create_playlist(name, show_id, max_duration):
     conn = getConnection()
     cursor = conn.cursor()
 
@@ -20,11 +20,11 @@ def create_playlist(name, show_id):
         return False
 
     sql = """
-        INSERT INTO Playlist (playlist_name, showid)
-        VALUES (%s, %s)
+        INSERT INTO Playlist (playlist_name, showid, max_duration)
+        VALUES (%s, %s, %s)
     """
 
-    cursor.execute(sql, (name, show_id))
+    cursor.execute(sql, (name, show_id, max_duration))
     conn.commit()
 
     cursor.close()
