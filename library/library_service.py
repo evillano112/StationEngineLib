@@ -54,26 +54,51 @@ def search_library(search_type, value=None, start_year=None, end_year=None):
     conn.close()
     return rows
 
-'''  
-def getRow(songid):
+def get_random_song():
 
-def deleteSong(songid):
     conn = getConnection()
     cursor = conn.cursor(dictionary=True)
 
-    sqlbase = """
-            SELECT DISTINCT
-                s.songid,
-                s.title,
-                s.artist,
-                s.album,
-                s.year,
-                sf.duration
-                where songid 
-            FROM Song s
-            JOIN SongFile sf ON s.songid = sf.songid
-            LEFT JOIN TagEntry te ON s.songid = te.songid
-            LEFT JOIN Tags t ON te.tagid = t.tagid
-        """
+    cursor.execute("""
+        SELECT s.songid, sf.duration
+        FROM Song s
+        JOIN SongFile sf ON s.songid = sf.songid
+        ORDER BY RAND()
+        LIMIT 1
+    """)
 
-'''
+    row = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+    return row
+
+def get_random_song_by_tag(tag):
+
+    conn = getConnection()
+    cursor = conn.cursor(dictionary=True)
+
+    sql = """
+        SELECT s.songid, sf.duration
+        FROM Song s
+        JOIN SongFile sf ON s.songid = sf.songid
+        JOIN TagEntry te ON s.songid = te.songid
+        JOIN Tags t ON te.tagid = t.tagid
+        WHERE t.tagname = %s
+        ORDER BY RAND()
+        LIMIT 1
+    """
+
+    cursor.execute(sql, (tag,))
+
+    row = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+    return row
+
+
+
+

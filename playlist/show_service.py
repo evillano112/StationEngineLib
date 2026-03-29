@@ -13,9 +13,63 @@ def create_show(
     is_indefinite=False
 ):
     conn = getConnection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
 
     try:
+        # ----------------------------
+        # CHECK FOR TIME OVERLAPS
+        # ----------------------------
+        overlap_sql = """
+            SELECT * FROM Shows
+            WHERE (
+                -- TIME OVERLAP
+                (start_time < %s AND end_time > %s)
+            )
+        """
+
+        cursor.execute(overlap_sql, (end_time, start_time))
+        existing_shows = cursor.fetchall()
+
+        for show in existing_shows:
+
+            # ----------------------------
+            # MATCH LOGIC BASED ON FREQUENCY
+            # ----------------------------
+
+            # ONE-TIME vs ONE-TIME
+            if frequency == "one_time" and show["frequency"] == "one_time":
+                if specific_date == show["specific_date"]:
+                    return False, "Conflict: overlapping one-time show"
+
+            # WEEKLY / BIWEEKLY
+            elif frequency in ("weekly", "biweekly") and show["frequency"] in ("weekly", "biweekly"):
+                if day_of_week == show["day_of_week"]:
+                    return False, "Conflict: overlapping weekly show"
+
+            # MONTHLY (simplified for now)
+            elif frequency == "monthly" and show["frequency"] == "monthly":
+                if day_of_week == show["day_of_week"]:
+                    return False, "Conflict: overlapping monthly show"
+
+            # ONE-TIME vs RECURRING
+            elif frequency == "one_time":
+                if show["frequency"] != "one_time":
+                    if day_of_week and specific_date:
+                        import datetime
+                        dow = datetime.datetime.strptime(specific_date, "%Y-%m-%d").strftime("%A").lower()
+                        if dow == show["day_of_week"]:
+                            return False, "Conflict: overlaps recurring show"
+
+            elif show["frequency"] == "one_time":
+                if frequency != "one_time":
+                    import datetime
+                    dow = datetime.datetime.strptime(show["specific_date"], "%Y-%m-%d").strftime("%A").lower()
+                    if dow == day_of_week:
+                        return False, "Conflict: overlaps one-time show"
+
+        # ----------------------------
+        # INSERT IF SAFE
+        # ----------------------------
         sql = """
             INSERT INTO Shows (
                 name,
@@ -43,7 +97,7 @@ def create_show(
 
         conn.commit()
 
-        # Automatically create tag with show name
+        # Create tag automatically
         create_tag(name)
 
         return True, "Show created successfully"

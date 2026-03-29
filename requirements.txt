@@ -1,3 +1,6 @@
 mysql-connector-python>=8.1.0
 mutagen>=1.46.0
 python-dotenv>=1.2.2
+ffmpeg
+liquidsoap
+icecast2
