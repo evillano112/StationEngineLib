@@ -32,15 +32,15 @@ from library.delete_service import (
 
 try:
     from queue_eng.import_station_media import (
-        import_media_file,
+        import_station_media as import_media_file,
         import_incoming_ids,
         import_incoming_sweepers,
     )
-except Exception:
+except Exception as e:
+    print(f"Failed to load station media importer: {e}")
     import_media_file = None
     import_incoming_ids = None
     import_incoming_sweepers = None
-
 
 LIQ_PROCESS = None
 DISPATCHER_PROCESS = None
