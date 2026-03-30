@@ -1,4 +1,3 @@
-import socket
 import time
 
 from queue_eng.queue_service import (
@@ -6,22 +5,18 @@ from queue_eng.queue_service import (
     count_dispatched_unplayed,
     resolve_queue_item_filepath,
     mark_dispatched,
-    mark_played_due_items,
+    archive_and_remove_played_due_items,
 )
+from stream.liquidsoap_client import push_to_queue
 
-LIQ_HOST = "localhost"
-LIQ_PORT = 1234
-LOOKAHEAD_SECONDS = 900
-MAX_PENDING_PUSHES = 5
+# load roughly the next 30 minutes
+LOOKAHEAD_SECONDS = 1800
+
+# cap how many items we preload into Liquidsoap
+MAX_PENDING_PUSHES = 8
+
+# how often to poll for new
 POLL_SECONDS = 5
-
-
-def push_to_liquidsoap(filepath):
-    cmd = f"request.push {filepath}\n"
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((LIQ_HOST, LIQ_PORT))
-        s.sendall(cmd.encode("utf-8"))
 
 
 def run_dispatcher():
@@ -29,7 +24,8 @@ def run_dispatcher():
 
     while True:
         try:
-            mark_played_due_items()
+            # move already-played rows into archive and remove from live queue
+            archive_and_remove_played_due_items()
 
             pending_count = count_dispatched_unplayed()
             room = max(0, MAX_PENDING_PUSHES - pending_count)
@@ -44,16 +40,19 @@ def run_dispatcher():
                     filepath = resolve_queue_item_filepath(row["queueid"])
 
                     if not filepath:
+                        print(f"Skipping queueid={row['queueid']} because filepath could not be resolved")
                         continue
 
-                    push_to_liquidsoap(filepath)
+                    response = push_to_queue(filepath)
                     mark_dispatched(row["queueid"])
+
                     print(f"Dispatched queueid={row['queueid']} -> {filepath}")
+                    print(response.strip())
 
             time.sleep(POLL_SECONDS)
 
         except Exception as e:
-            print("Dispatcher error:", e)
+            print(f"Dispatcher error: {e}")
             time.sleep(5)
 
 

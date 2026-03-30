@@ -149,7 +149,7 @@ def resolve_queue_item_filepath(queueid):
     return row["song_path"] if row["media_type"] == "SONG" else row["media_path"]
 
 
-def get_dispatchable_items(lookahead_seconds=900, limit=5):
+def get_dispatchable_items(lookahead_seconds=1800, limit=8):
     conn = getConnection()
     cursor = conn.cursor(dictionary=True)
 
@@ -157,6 +157,7 @@ def get_dispatchable_items(lookahead_seconds=900, limit=5):
         SELECT *
         FROM PlaybackQueue
         WHERE dispatch_status = 'PENDING'
+          AND play_time >= NOW()
           AND play_time <= NOW() + INTERVAL %s SECOND
         ORDER BY play_time ASC
         LIMIT %s
@@ -201,19 +202,42 @@ def mark_dispatched(queueid):
     conn.close()
 
 
-def mark_played_due_items():
+def archive_and_remove_played_due_items():
     conn = getConnection()
     cursor = conn.cursor()
 
-    cursor.execute("""
-        UPDATE PlaybackQueue
-        SET dispatch_status = 'PLAYED',
-            played_at = NOW()
-        WHERE dispatch_status = 'DISPATCHED'
-          AND played_at IS NULL
-          AND play_time <= NOW()
-    """)
+    try:
+        cursor.execute("""
+            INSERT INTO PlaybackQueueArchive (
+                queueid, play_time, media_type,
+                songid, mediaid, source, showid, notes
+            )
+            SELECT
+                queueid, play_time, media_type,
+                songid, mediaid, source, showid, notes
+            FROM PlaybackQueue
+            WHERE dispatch_status = 'DISPATCHED'
+              AND play_time <= NOW()
+        """)
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+        cursor.execute("""
+            UPDATE PlaybackQueue
+            SET dispatch_status = 'PLAYED',
+                played_at = NOW()
+            WHERE dispatch_status = 'DISPATCHED'
+              AND play_time <= NOW()
+        """)
+
+        cursor.execute("""
+            DELETE FROM PlaybackQueue
+            WHERE dispatch_status = 'PLAYED'
+              AND played_at IS NOT NULL
+        """)
+
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()

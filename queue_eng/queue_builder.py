@@ -10,37 +10,47 @@ from queue_eng.media_service import get_media
 from queue_eng.show_logic import get_active_show
 from queue_eng.playlist_logic import get_playlist_for_show, get_playlist_songs
 
-GUARD_MINUTES = 30
+HORIZON_HOURS = 72
 
 
-def insert(cursor, t, media_type, songid=None, mediaid=None, source="AUTO", showid=None):
+def insert(cursor, t, media_type, songid=None, mediaid=None, source="AUTO", showid=None, notes=None):
     cursor.execute("""
         INSERT INTO PlaybackQueue
-        (play_time, media_type, songid, mediaid, source, showid, dispatch_status)
-        VALUES (%s, %s, %s, %s, %s, %s, 'PENDING')
-    """, (t, media_type, songid, mediaid, source, showid))
+        (play_time, media_type, songid, mediaid, source, showid, notes, dispatch_status)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, 'PENDING')
+    """, (t, media_type, songid, mediaid, source, showid, notes))
 
 
-def clear_future_pending(cursor, guard_minutes=GUARD_MINUTES):
+def get_queue_end(cursor):
     cursor.execute("""
-        DELETE FROM PlaybackQueue
-        WHERE play_time > NOW() + INTERVAL %s MINUTE
-          AND dispatch_status = 'PENDING'
-    """, (guard_minutes,))
+        SELECT MAX(play_time) AS max_play_time
+        FROM PlaybackQueue
+        WHERE play_time >= NOW()
+    """)
+    row = cursor.fetchone()
+    return row[0] if row and row[0] else None
 
 
-def build_queue(hours=72):
+def build_queue(hours=HORIZON_HOURS):
     conn = getConnection()
     cursor = conn.cursor()
 
-    print("clearing future pending queue rows")
-    clear_future_pending(cursor)
-    conn.commit()
-
     now = datetime.now().replace(microsecond=0)
-    build_start = now + timedelta(minutes=GUARD_MINUTES)
-    end = now + timedelta(hours=hours)
-    pointer = build_start
+    target_end = now + timedelta(hours=hours)
+
+    queue_end = get_queue_end(cursor)
+
+    if queue_end is None:
+        pointer = now
+    else:
+        pointer = queue_end
+
+    # if already planned far enough ahead, do nothing
+    if pointer >= target_end:
+        cursor.close()
+        conn.close()
+        print("Queue already extends far enough ahead.")
+        return
 
     pools = build_rotation_pools()
     clock_index = 0
@@ -51,10 +61,10 @@ def build_queue(hours=72):
         print("No songs found in library.")
         return
 
-    while pointer < end:
+    while pointer < target_end:
         advanced = False
 
-        # top-of-hour legal ID window
+        # legal ID window near top of hour
         if pointer.minute == 0 and pointer.second < 90:
             media = get_media("LEGAL_ID")
             if media:
@@ -65,8 +75,8 @@ def build_queue(hours=72):
         if advanced:
             continue
 
-        # quarter-hour sweepers with wider windows
-        if (
+        # sweeper windows
+        sweeper_window = (
             (pointer.minute == 14 and pointer.second >= 30) or
             (pointer.minute == 15) or
             (pointer.minute == 16 and pointer.second <= 30) or
@@ -76,7 +86,9 @@ def build_queue(hours=72):
             (pointer.minute == 44 and pointer.second >= 30) or
             (pointer.minute == 45) or
             (pointer.minute == 46 and pointer.second <= 30)
-        ):
+        )
+
+        if sweeper_window:
             media = get_media("SWEEPER")
             if media:
                 insert(cursor, pointer, "MEDIA", mediaid=media["mediaid"], source="AUTO")
@@ -131,6 +143,7 @@ def build_queue(hours=72):
             if advanced:
                 continue
 
+        # regular fallback rotation
         song = get_next_rotation_song(pools, clock_index)
         clock_index += 1
 
@@ -140,6 +153,7 @@ def build_queue(hours=72):
             pointer += timedelta(seconds=dur)
             advanced = True
 
+        # safety fallback
         if not advanced:
             pointer += timedelta(seconds=60)
 
@@ -147,4 +161,4 @@ def build_queue(hours=72):
     cursor.close()
     conn.close()
 
-    print("Queue built successfully")
+    print("Queue extended successfully")

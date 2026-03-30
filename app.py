@@ -3,7 +3,7 @@ import subprocess
 import socket
 from pathlib import Path
 from datetime import datetime
-
+from stream.liquidsoap_client import push_to_queue
 sys.path.append(str(Path(__file__).parent))
 
 from queue_eng.queue_builder import build_queue
@@ -104,10 +104,8 @@ def stop_dispatcher():
 
 def liquidsoap_request(filepath):
     try:
-        cmd = f"request.push {filepath}\n"
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((LIQ_HOST, LIQ_PORT))
-            s.send(cmd.encode())
+        response = push_to_queue(filepath)
+        print("Liquidsoap response:", response.strip())
         print("Pushed to Liquidsoap")
     except Exception as e:
         print(f"Liquidsoap push failed: {e}")
@@ -418,58 +416,123 @@ def main():
             success, message = delete_show(show_id)
             print(message)
 
+
         elif choice == "13":
+
             name = input("Show name: ").strip()
-            start_time = input("Start time (HH:MM:SS): ").strip()
-            end_time = input("End time (HH:MM:SS): ").strip()
+
+            start_time = input("Start time (HH:MM:SS, must be :00 or :30): ").strip()
+
+            end_time = input("End time (HH:MM:SS, must be :00 or :30): ").strip()
+
+            def valid_half_hour(t):
+
+                try:
+
+                    dt = datetime.strptime(t, "%H:%M:%S")
+
+                    return dt.minute in (0, 30) and dt.second == 0
+
+                except ValueError:
+
+                    return False
+
+            if not valid_half_hour(start_time):
+                print("Invalid start time. Use HH:00:00 or HH:30:00.")
+
+                continue
+
+            if not valid_half_hour(end_time):
+                print("Invalid end time. Use HH:00:00 or HH:30:00.")
+
+                continue
+
+            if start_time >= end_time:
+                print("End time must be after start time.")
+
+                continue
 
             print("Frequency options:")
+
             print("weekly, biweekly, monthly, one_time")
+
             frequency = input("Frequency: ").strip()
 
             day_of_week = None
+
             specific_date = None
+
             repeat_until = None
+
             is_indefinite = False
 
             if frequency in ("weekly", "biweekly"):
+
                 day_of_week = input(
+
                     "Day of week (monday-sunday): "
+
                 ).strip().lower()
 
                 indefinite = input("Repeat indefinitely? (y/n): ").strip().lower()
+
                 if indefinite == "y":
+
                     is_indefinite = True
+
                 else:
+
                     repeat_until = input("Repeat until (YYYY-MM-DD): ").strip()
+
 
             elif frequency == "monthly":
+
                 day_of_week = input(
+
                     "Day of week (for now): "
+
                 ).strip().lower()
 
                 indefinite = input("Repeat indefinitely? (y/n): ").strip().lower()
+
                 if indefinite == "y":
+
                     is_indefinite = True
+
                 else:
+
                     repeat_until = input("Repeat until (YYYY-MM-DD): ").strip()
 
+
             elif frequency == "one_time":
+
                 specific_date = input("Specific date (YYYY-MM-DD): ").strip()
 
+
             else:
+
                 print("Invalid frequency")
+
                 continue
 
             success, message = create_show(
+
                 name=name,
+
                 start_time=start_time,
+
                 end_time=end_time,
+
                 frequency=frequency,
+
                 day_of_week=day_of_week,
+
                 specific_date=specific_date,
+
                 repeat_until=repeat_until,
+
                 is_indefinite=is_indefinite
+
             )
 
             print(message)
