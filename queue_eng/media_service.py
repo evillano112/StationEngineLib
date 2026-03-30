@@ -1,14 +1,25 @@
 from db.connection import getConnection
 import random
 
-def get_media_by_type(media_type):
+from db.connection import getConnection
+import random
+
+def get_media(media_type, exclude_ids=None):
     conn = getConnection()
     cursor = conn.cursor(dictionary=True)
 
-    cursor.execute("""
-        SELECT * FROM StationMedia
-        WHERE media_type = %s
-    """, (media_type,))
+    if exclude_ids:
+        format_strings = ','.join(['%s'] * len(exclude_ids))
+        cursor.execute(f"""
+            SELECT * FROM StationMedia
+            WHERE media_type = %s
+            AND mediaid NOT IN ({format_strings})
+        """, (media_type, *exclude_ids))
+    else:
+        cursor.execute("""
+            SELECT * FROM StationMedia
+            WHERE media_type = %s
+        """, (media_type,))
 
     rows = cursor.fetchall()
 
@@ -19,15 +30,3 @@ def get_media_by_type(media_type):
         return None
 
     return random.choice(rows)
-
-
-def get_legal_id():
-    return get_media_by_type("LEGAL_ID")
-
-
-def get_sweeper():
-    return get_media_by_type("SWEEPER")
-
-
-def get_promo():
-    return get_media_by_type("PROMO")

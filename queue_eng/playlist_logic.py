@@ -1,6 +1,5 @@
 from db.connection import getConnection
 
-
 def get_playlist_for_show(showid):
     conn = getConnection()
     cursor = conn.cursor(dictionary=True)
@@ -14,14 +13,13 @@ def get_playlist_for_show(showid):
     """, (showid,))
 
     row = cursor.fetchone()
-
     cursor.close()
     conn.close()
 
     return row["playlistid"] if row else None
 
 
-def get_playlist_songs(playlistid):
+def get_playlist_songs(pid):
     conn = getConnection()
     cursor = conn.cursor(dictionary=True)
 
@@ -31,10 +29,10 @@ def get_playlist_songs(playlistid):
         JOIN SongFile sf ON pe.songid = sf.songid
         WHERE pe.playlistid = %s
         ORDER BY pe.position
-    """, (playlistid,))
+    """, (pid,))
 
     rows = cursor.fetchall()
-
     cursor.close()
     conn.close()
+
     return rows

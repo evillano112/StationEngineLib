@@ -165,18 +165,39 @@ def importIncomingFiles():
     files = [f for f in INCOMING_FOLDER.iterdir() if f.is_file()]
     if not files:
         print("No files to import in incoming folder")
-        return
+        return []
+
+    results = []
 
     for f in files:
         print(f"Importing {f.name}...")
-        import_song(f)
-        # Remove file after import
         try:
-            f.unlink()
+            ok, msg, songid = import_song(f)
+            print(f"  -> {msg}")
+
+            results.append({
+                "file": f.name,
+                "success": ok,
+                "message": msg,
+                "songid": songid
+            })
+
+            if ok:
+                try:
+                    f.unlink()
+                except Exception as e:
+                    print(f"  -> imported, but could not delete source file: {e}")
         except Exception as e:
-            print(f"Could not delete {f.name} after import: {e}")
+            print(f"  -> ERROR: {e}")
+            results.append({
+                "file": f.name,
+                "success": False,
+                "message": str(e),
+                "songid": None
+            })
 
     print("Finished importing incoming files")
+    return results
 
 # --------------------
 # CLI usage idk i was having a problem and this fixed it idk how

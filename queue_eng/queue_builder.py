@@ -1,88 +1,150 @@
 from datetime import datetime, timedelta
+from db.connection import getConnection
+
+from queue_eng.music_selector import (
+    build_rotation_pools,
+    get_next_rotation_song,
+    get_next_show_song,
+)
+from queue_eng.media_service import get_media
 from queue_eng.show_logic import get_active_show
-from queue_eng.music_selector import get_songs_for_show, pick_random_song
-from queue_eng.media_service import get_legal_id, get_sweeper
-from queue_eng.queue_service import insert_queue_item
 from queue_eng.playlist_logic import get_playlist_for_show, get_playlist_songs
 
+GUARD_MINUTES = 30
 
-SWEEPER_INTERVAL = 3
+
+def insert(cursor, t, media_type, songid=None, mediaid=None, source="AUTO", showid=None):
+    cursor.execute("""
+        INSERT INTO PlaybackQueue
+        (play_time, media_type, songid, mediaid, source, showid, dispatch_status)
+        VALUES (%s, %s, %s, %s, %s, %s, 'PENDING')
+    """, (t, media_type, songid, mediaid, source, showid))
 
 
-def build_queue(hours=3):
-    now = datetime.now()
-    end_time = now + timedelta(hours=hours)
+def clear_future_pending(cursor, guard_minutes=GUARD_MINUTES):
+    cursor.execute("""
+        DELETE FROM PlaybackQueue
+        WHERE play_time > NOW() + INTERVAL %s MINUTE
+          AND dispatch_status = 'PENDING'
+    """, (guard_minutes,))
 
-    pointer = now
-    song_counter = 0
 
-    print(f"Building queue {now} → {end_time}")
+def build_queue(hours=72):
+    conn = getConnection()
+    cursor = conn.cursor()
 
-    while pointer < end_time:
+    print("clearing future pending queue rows")
+    clear_future_pending(cursor)
+    conn.commit()
+
+    now = datetime.now().replace(microsecond=0)
+    build_start = now + timedelta(minutes=GUARD_MINUTES)
+    end = now + timedelta(hours=hours)
+    pointer = build_start
+
+    pools = build_rotation_pools()
+    clock_index = 0
+
+    if not any(pools.values()):
+        cursor.close()
+        conn.close()
+        print("No songs found in library.")
+        return
+
+    while pointer < end:
+        advanced = False
+
+        # top-of-hour legal ID window
+        if pointer.minute == 0 and pointer.second < 90:
+            media = get_media("LEGAL_ID")
+            if media:
+                insert(cursor, pointer, "MEDIA", mediaid=media["mediaid"], source="AUTO")
+                pointer += timedelta(seconds=media["duration"] or 10)
+                advanced = True
+
+        if advanced:
+            continue
+
+        # quarter-hour sweepers with wider windows
+        if (
+            (pointer.minute == 14 and pointer.second >= 30) or
+            (pointer.minute == 15) or
+            (pointer.minute == 16 and pointer.second <= 30) or
+            (pointer.minute == 29 and pointer.second >= 30) or
+            (pointer.minute == 30) or
+            (pointer.minute == 31 and pointer.second <= 30) or
+            (pointer.minute == 44 and pointer.second >= 30) or
+            (pointer.minute == 45) or
+            (pointer.minute == 46 and pointer.second <= 30)
+        ):
+            media = get_media("SWEEPER")
+            if media:
+                insert(cursor, pointer, "MEDIA", mediaid=media["mediaid"], source="AUTO")
+                pointer += timedelta(seconds=media["duration"] or 10)
+                advanced = True
+
+        if advanced:
+            continue
 
         show = get_active_show(pointer)
 
-        # -------------------
-        # LEGAL ID (hourly)
-        # -------------------
-        if pointer.minute == 0 and pointer.second < 5:
-            media = get_legal_id()
-            if media:
-                insert_queue_item(pointer, "MEDIA", mediaid=media["mediaid"], source="CLOCK")
-                pointer += timedelta(seconds=media["duration"])
-                continue
-
-        # -------------------
-        # SHOW MODE
-        # -------------------
         if show:
-            playlist_id = get_playlist_for_show(show["showid"])
+            show_end = datetime.combine(pointer.date(), show["end_time"])
 
-            if playlist_id:
-                songs = get_playlist_songs(playlist_id)
-
+            pid = get_playlist_for_show(show["showid"])
+            if pid:
+                songs = get_playlist_songs(pid)
                 for s in songs:
-                    insert_queue_item(
+                    dur = s["duration"] or 180
+                    if pointer + timedelta(seconds=dur) > show_end:
+                        break
+
+                    insert(
+                        cursor,
                         pointer,
                         "SONG",
                         songid=s["songid"],
-                        source="PLAYLIST"
+                        source="PLAYLIST",
+                        showid=show["showid"]
                     )
-                    pointer += timedelta(seconds=s["duration"] or 180)
+                    pointer += timedelta(seconds=dur)
+                    advanced = True
 
+            if advanced:
                 continue
 
-            songs = get_songs_for_show(show["name"])
-        else:
-            songs = get_songs_for_show("general")
+            show_song = get_next_show_song(show["name"])
+            if show_song:
+                dur = show_song["duration"] or 180
+                if pointer + timedelta(seconds=dur) <= show_end:
+                    insert(
+                        cursor,
+                        pointer,
+                        "SONG",
+                        songid=show_song["songid"],
+                        source="SHOW",
+                        showid=show["showid"]
+                    )
+                    pointer += timedelta(seconds=dur)
+                    advanced = True
 
-        song = pick_random_song(songs)
+            if advanced:
+                continue
+
+        song = get_next_rotation_song(pools, clock_index)
+        clock_index += 1
 
         if song:
-            insert_queue_item(
-                pointer,
-                "SONG",
-                songid=song["songid"],
-                source="AUTO"
-            )
+            dur = song["duration"] or 180
+            insert(cursor, pointer, "SONG", songid=song["songid"], source="AUTO")
+            pointer += timedelta(seconds=dur)
+            advanced = True
 
-            pointer += timedelta(seconds=song["duration"] or 180)
-            song_counter += 1
+        if not advanced:
+            pointer += timedelta(seconds=60)
 
-        # -------------------
-        # SWEEPER
-        # -------------------
-        if song_counter >= SWEEPER_INTERVAL:
-            sweeper = get_sweeper()
+    conn.commit()
+    cursor.close()
+    conn.close()
 
-            if sweeper:
-                insert_queue_item(
-                    pointer,
-                    "MEDIA",
-                    mediaid=sweeper["mediaid"],
-                    source="CLOCK"
-                )
-
-                pointer += timedelta(seconds=sweeper["duration"] or 10)
-
-            song_counter = 0
+    print("Queue built successfully")
