@@ -39,13 +39,8 @@ def build_queue(hours=HORIZON_HOURS):
     target_end = now + timedelta(hours=hours)
 
     queue_end = get_queue_end(cursor)
+    pointer = queue_end if queue_end else now
 
-    if queue_end is None:
-        pointer = now
-    else:
-        pointer = queue_end
-
-    # if already planned far enough ahead, do nothing
     if pointer >= target_end:
         cursor.close()
         conn.close()
@@ -61,39 +56,46 @@ def build_queue(hours=HORIZON_HOURS):
         print("No songs found in library.")
         return
 
+    # track media windows already placed
+    fired_windows = set()
+
     while pointer < target_end:
         advanced = False
 
-        # legal ID window near top of hour
+        hour_key = pointer.strftime("%Y-%m-%d %H")
+
+        # legal id once per hour near top of hour
         if pointer.minute == 0 and pointer.second < 90:
-            media = get_media("LEGAL_ID")
-            if media:
-                insert(cursor, pointer, "MEDIA", mediaid=media["mediaid"], source="AUTO")
-                pointer += timedelta(seconds=media["duration"] or 10)
-                advanced = True
+            key = f"{hour_key}:LEGAL"
+            if key not in fired_windows:
+                media = get_media("LEGAL_ID")
+                if media:
+                    insert(cursor, pointer, "MEDIA", mediaid=media["mediaid"], source="AUTO")
+                    pointer += timedelta(seconds=media["duration"] or 10)
+                    fired_windows.add(key)
+                    advanced = True
 
         if advanced:
             continue
 
         # sweeper windows
-        sweeper_window = (
-            (pointer.minute == 14 and pointer.second >= 30) or
-            (pointer.minute == 15) or
-            (pointer.minute == 16 and pointer.second <= 30) or
-            (pointer.minute == 29 and pointer.second >= 30) or
-            (pointer.minute == 30) or
-            (pointer.minute == 31 and pointer.second <= 30) or
-            (pointer.minute == 44 and pointer.second >= 30) or
-            (pointer.minute == 45) or
-            (pointer.minute == 46 and pointer.second <= 30)
-        )
+        sweeper_slot = None
+        if (pointer.minute == 14 and pointer.second >= 30) or pointer.minute == 15 or (pointer.minute == 16 and pointer.second <= 30):
+            sweeper_slot = "15"
+        elif (pointer.minute == 29 and pointer.second >= 30) or pointer.minute == 30 or (pointer.minute == 31 and pointer.second <= 30):
+            sweeper_slot = "30"
+        elif (pointer.minute == 44 and pointer.second >= 30) or pointer.minute == 45 or (pointer.minute == 46 and pointer.second <= 30):
+            sweeper_slot = "45"
 
-        if sweeper_window:
-            media = get_media("SWEEPER")
-            if media:
-                insert(cursor, pointer, "MEDIA", mediaid=media["mediaid"], source="AUTO")
-                pointer += timedelta(seconds=media["duration"] or 10)
-                advanced = True
+        if sweeper_slot is not None:
+            key = f"{hour_key}:SWEEPER:{sweeper_slot}"
+            if key not in fired_windows:
+                media = get_media("SWEEPER")
+                if media:
+                    insert(cursor, pointer, "MEDIA", mediaid=media["mediaid"], source="AUTO")
+                    pointer += timedelta(seconds=media["duration"] or 10)
+                    fired_windows.add(key)
+                    advanced = True
 
         if advanced:
             continue
@@ -103,6 +105,7 @@ def build_queue(hours=HORIZON_HOURS):
         if show:
             show_end = datetime.combine(pointer.date(), show["end_time"])
 
+            # playlist first
             pid = get_playlist_for_show(show["showid"])
             if pid:
                 songs = get_playlist_songs(pid)
@@ -125,6 +128,7 @@ def build_queue(hours=HORIZON_HOURS):
             if advanced:
                 continue
 
+            # then tagged show fill
             show_song = get_next_show_song(show["name"])
             if show_song:
                 dur = show_song["duration"] or 180
@@ -143,7 +147,7 @@ def build_queue(hours=HORIZON_HOURS):
             if advanced:
                 continue
 
-        # regular fallback rotation
+        # regular rotation fallback
         song = get_next_rotation_song(pools, clock_index)
         clock_index += 1
 
@@ -153,7 +157,6 @@ def build_queue(hours=HORIZON_HOURS):
             pointer += timedelta(seconds=dur)
             advanced = True
 
-        # safety fallback
         if not advanced:
             pointer += timedelta(seconds=60)
 

@@ -241,3 +241,40 @@ def archive_and_remove_played_due_items():
     finally:
         cursor.close()
         conn.close()
+
+def get_next_pending_due_item():
+    conn = getConnection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT *
+        FROM PlaybackQueue
+        WHERE dispatch_status = 'PENDING'
+          AND play_time <= NOW()
+        ORDER BY play_time ASC
+        LIMIT 1
+    """)
+
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return row
+
+
+def get_next_pending_after(dt):
+    conn = getConnection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT *
+        FROM PlaybackQueue
+        WHERE dispatch_status = 'PENDING'
+          AND play_time > %s
+        ORDER BY play_time ASC
+        LIMIT 1
+    """, (dt,))
+
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return row
