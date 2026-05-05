@@ -25,18 +25,38 @@ def computeHash(filepath, block_size=65536):
     return sha256.hexdigest()
 
 def storeFile(filepath):
-    """Move the file into organized storage under media/songs"""
+    """Copy the file into organized storage under media/songs alphabetically"""
     filehash = computeHash(filepath)
-    ext = filepath.suffix.lower()
-    folder = MEDIA_ROOT / filehash[:2]
-    folder.mkdir(parents=True, exist_ok=True)
-    dest = folder / f"{filehash}{ext}"
 
-    if not dest.exists():
-        shutil.copy2(filepath, dest)
+    # Use first letter of original filename for folder
+    first_char = filepath.stem[0].upper()
+
+    # If filename does not start with a letter/number, put it in #
+    if not first_char.isalnum():
+        first_char = "#"
+
+    folder = MEDIA_ROOT / first_char
+    folder.mkdir(parents=True, exist_ok=True)
+
+    # Preserve original filename
+    dest = folder / filepath.name
+
+    # Avoid overwriting if same filename already exists
+    if dest.exists():
+        counter = 1
+        while True:
+            new_name = f"{filepath.stem}_{counter}{filepath.suffix}"
+            new_dest = folder / new_name
+
+            if not new_dest.exists():
+                dest = new_dest
+                break
+
+            counter += 1
+
+    shutil.copy2(filepath, dest)
 
     return dest.resolve(), filehash
-
 # --------------------
 # Tag management
 # --------------------
